@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบบริหารจัดการกรรมการประจำหน่วยเลือกตั้ง (กปน.)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts: Sarabun -->
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <!-- SheetJS for Excel -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+
+    <style>
+        body { font-family: 'Sarabun', sans-serif; background-color: #f3f4f6; }
+        
+        /* --- Styles สำหรับการพิมพ์ A5 --- */
+        @media print {
+            @page { size: A5 portrait; margin: 0; }
+            body { background: white; }
+            body * { visibility: hidden; }
+            #print-area, #print-area * { visibility: visible; }
+            #print-area {
+                display: block !important; position: absolute; left: 0; top: 0;
+                width: 148mm; min-height: 210mm; padding: 15mm;
+                background: white; z-index: 9999; font-size: 14px; line-height: 1.6; color: #000;
+            }
+            .no-print { display: none !important; }
+        }
+
+        .modal { transition: opacity 0.25s ease; }
+        .loader { border-top-color: #3498db; -webkit-animation: spinner 1.5s linear infinite; animation: spinner 1.5s linear infinite; }
+        @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <!-- ================= Login Overlay ================= -->
+    <div id="login-overlay" class="fixed inset-0 bg-gray-900 z-[100] flex items-center justify-center transition-opacity duration-300">
+        <div class="bg-white p-8 rounded-xl shadow-2xl w-96 max-w-full mx-4">
+            <div class="text-center mb-6">
+                 <div class="bg-blue-100 text-blue-900 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl shadow-inner">
+                    <i class="fas fa-user-lock"></i>
+                 </div>
+                 <h2 class="text-2xl font-bold text-gray-800">เข้าสู่ระบบ</h2>
+                 <p class="text-gray-500 text-sm mt-1">ระบบเปลี่ยนแปลงกรรมการ (กปน.)</p>
+            </div>
+            <form onsubmit="handleLogin(event)" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">ชื่อหน่วยงาน / ผู้ใช้งาน</label>
+                    <div class="relative">
+                        <input type="text" id="login-agency" class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="ระบุชื่อผู้ใช้งาน" required>
+                        <i class="fas fa-user absolute left-3 top-2.5 text-gray-400"></i>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">รหัสผ่าน</label>
+                    <div class="relative">
+                        <input type="password" id="login-password" class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="ระบุรหัสผ่าน" required>
+                        <i class="fas fa-key absolute left-3 top-2.5 text-gray-400"></i>
+                    </div>
+                </div>
+                <button type="submit" id="btn-login" class="w-full bg-blue-900 text-white py-2 rounded hover:bg-blue-800 transition shadow font-bold mt-2">
+                    <i class="fas fa-sign-in-alt mr-2"></i> เข้าใช้งาน
+                </button>
+            </form>
+            <div class="mt-4 text-center">
+                <p class="text-xs text-gray-400">เฉพาะเจ้าหน้าที่ที่ได้รับอนุญาตเท่านั้น</p>
+                <p id="session-status" class="text-xs text-red-400 mt-1 hidden"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= Main App Content ================= -->
+    <div id="app-content" class="hidden">
+        
+        <!-- Navbar -->
+        <nav class="bg-blue-900 text-white shadow-lg no-print">
+            <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+                <div class="flex items-center space-x-3">
+                    <div class="bg-white text-blue-900 p-2 rounded-full"><i class="fas fa-vote-yea text-xl"></i></div>
+                    <div><h1 class="text-xl font-bold">ระบบบริหารงานเลือกตั้ง</h1><p class="text-xs text-blue-200">จัดการและเปลี่ยนแปลง กปน.</p></div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="text-sm hidden md:block opacity-75 mr-2" id="user-display">Admin Mode</div>
+                    <button onclick="logout()" class="text-xs bg-red-600 hover:bg-red-700 px-3 py-1 rounded transition"><i class="fas fa-power-off mr-1"></i> ออกจากระบบ</button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <div class="container mx-auto px-4 py-8 no-print">
+            
+            <!-- Search & Filter -->
+            <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+                <h2 class="text-lg font-bold mb-4 text-gray-700"><i class="fas fa-search mr-2"></i>ค้นหาและกรองข้อมูล</h2>
+                <div class="flex flex-col md:flex-row gap-4 items-end">
+                    <div class="flex-1 w-full relative">
+                        <label class="text-sm text-gray-500 mb-1 block">คำค้นหา (ค้นหาในเครื่อง)</label>
+                        <div class="relative">
+                            <input type="text" id="search-input" placeholder="ชื่อ, นามสกุล, เลขบัตร..." class="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition">
+                            <i class="fas fa-search absolute left-3 top-3.5 text-gray-400"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="w-full md:w-1/6 relative">
+                        <label class="text-sm text-gray-500 mb-1 block">หน่วยที่</label>
+                        <div class="relative">
+                            <select id="station-filter" class="w-full pl-3 pr-8 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white">
+                                <option value="">ทั้งหมด</option>
+                            </select>
+                            <i class="fas fa-chevron-down absolute right-3 top-3.5 text-gray-400 pointer-events-none"></i>
+                        </div>
+                    </div>
+
+                    <div class="w-full md:w-1/5 relative">
+                        <label class="text-sm text-gray-500 mb-1 block">แขวง</label>
+                        <div class="relative">
+                            <select id="subdistrict-filter" class="w-full pl-3 pr-8 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white">
+                                <option value="">ทั้งหมด</option>
+                            </select>
+                            <i class="fas fa-map-marker-alt absolute right-3 top-3.5 text-gray-400 pointer-events-none text-xs"></i>
+                        </div>
+                    </div>
+
+                    <div class="relative pb-3 px-2">
+                        <label class="inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="replaced-filter" class="sr-only peer">
+                            <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-500"></div>
+                            <span class="ms-2 text-sm font-medium text-gray-700">ดูประวัติการเปลี่ยน</span>
+                        </label>
+                    </div>
+
+                    <div class="flex gap-2 w-full md:w-auto flex-wrap lg:flex-nowrap">
+                        <button onclick="loadAllData()" class="flex-1 md:flex-none bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2 shadow" title="โหลดข้อมูลใหม่จาก Server">
+                            <i class="fas fa-sync-alt"></i> อัปเดตข้อมูล
+                        </button>
+
+                        <button onclick="exportToExcel()" class="flex-1 md:flex-none bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 transition flex items-center justify-center gap-2 shadow">
+                            <i class="fas fa-file-excel"></i> Export
+                        </button>
+
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results List -->
+            <div class="mb-4 flex justify-between items-center">
+                <h2 class="text-xl font-bold text-gray-800">รายชื่อกรรมการ</h2>
+                <span class="text-sm text-gray-500" id="result-count">...</span>
+            </div>
+
+            <div id="loading-spinner" class="hidden text-center py-12">
+                <div class="col-span-full text-center py-10"><i class="fa-solid fa-spinner fa-spin text-5xl text-blue-800"></i></div>
+                <h2 class="text-center text-gray-500 text-xl font-semibold">กำลังโหลดข้อมูล...</h2>
+                <p class="text-gray-400 text-sm mt-2">กรุณารอสักครู่ ระบบกำลังดึงรายชื่อทั้งหมดมาเก็บไว้ในเครื่อง</p>
+            </div>
+				
+            <!-- Grid -->
+            <div id="results-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+
+            <div id="no-results" class="hidden text-center py-12">
+                <div class="text-gray-300 text-6xl mb-4"><i class="fas fa-folder-open"></i></div>
+                <p class="text-gray-500 text-lg">ไม่พบข้อมูล</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Form for Replacement -->
+    <div id="replace-modal" class="fixed inset-0 w-full h-full z-50 hidden overflow-y-auto bg-gray-900 bg-opacity-50 flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-2xl rounded-xl shadow-2xl">
+            <div class="bg-blue-900 text-white px-6 py-4 rounded-t-xl flex justify-between items-center">
+                <h3 class="text-xl font-bold">บันทึกการเปลี่ยนแปลง</h3>
+                <button onclick="closeModal()" class="text-white hover:text-gray-300"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="p-6">
+                <div class="bg-red-50 border-l-4 border-red-500 p-4 mb-6 rounded">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h4 class="text-red-700 font-bold text-sm mb-1">บุคคลที่ถูกถอดถอน:</h4>
+                            <p class="text-gray-800 font-medium text-lg" id="modal-old-name">...</p>
+                            <p class="text-gray-600 text-sm" id="modal-old-role">...</p>
+                        </div>
+                        <div class="text-right">
+                            <span class="inline-block bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full font-bold">หน่วยที่ <span id="modal-station-id">...</span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <form id="replacement-form" onsubmit="handleReplacementSubmit(event)">
+                    <input type="hidden" id="target-id" name="target_id">
+                    <h4 class="text-gray-700 font-bold mb-4 border-b pb-2">ข้อมูลผู้ปฏิบัติหน้าที่แทน</h4>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div><label class="block text-sm font-medium text-gray-700 mb-1">เลขประจำตัวประชาชน <span class="text-red-500">*</span></label><input type="text" name="new_id_card" required maxlength="13" class="w-full border border-gray-300 rounded px-3 py-2"></div>
+                        <div><label class="block text-sm font-medium text-gray-700 mb-1">คำนำหน้า <span class="text-red-500">*</span></label><input type="text" name="new_prefix" required class="w-full border border-gray-300 rounded px-3 py-2"></div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div><label class="block text-sm font-medium text-gray-700 mb-1">ชื่อ <span class="text-red-500">*</span></label><input type="text" name="new_firstname" required class="w-full border border-gray-300 rounded px-3 py-2"></div>
+                        <div><label class="block text-sm font-medium text-gray-700 mb-1">นามสกุล <span class="text-red-500">*</span></label><input type="text" name="new_lastname" required class="w-full border border-gray-300 rounded px-3 py-2"></div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">หมายเลขโทรศัพท์ (ถ้ามี)</label>
+                            <input type="text" name="new_phone" class="w-full border border-gray-300 rounded px-3 py-2" placeholder="08xxxxxxxx">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">ที่อยู่ (สำหรับพิมพ์คำสั่ง - ถ้ามี)</label>
+                            <input type="text" name="new_address" class="w-full border border-gray-300 rounded px-3 py-2">
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end gap-3">
+                        <button type="button" onclick="closeModal()" class="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">ยกเลิก</button>
+                        <button type="submit" id="btn-submit" class="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">บันทึก & พิมพ์</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Print Area (A5) -->
+    <div id="print-area" class="hidden">
+        <div class="text-center mb-6">
+            <h1 class="text-xl font-bold text-gray-900 mt-4">เปลี่ยนแปลงกรรมการประจำหน่วยเลือกตั้ง</h1>
+            <p class="text-base text-gray-700 mt-2">เขตบางคอแหลม</p>
+        </div>
+        <div class="mb-4 text-base leading-relaxed text-justify">
+            <p class="mb-3 indent-8">ตามคำสั่งที่ <span class="font-bold">.../2569</span> เรื่อง แต่งตั้งคณะกรรมการประจำหน่วยเลือกตั้ง เนื่องด้วย <span id="print-old-name" class="font-bold">...</span> ตำแหน่ง <span id="print-old-role" class="font-bold">...</span> ประจำหน่วยเลือกตั้งที่ <span id="print-old-station" class="font-bold">...</span> แขวง <span id="print-old-subdistrict" class="font-bold">...</span> ไม่สามารถปฏิบัติหน้าที่ได้</p>
+            <p class="mb-3 indent-8">อาศัยอำนาจตามความในมาตรา ... แห่งพระราชบัญญัติประกอบรัฐธรรมนูญว่าด้วยการเลือกตั้ง จึงแต่งตั้งบุคคลต่อไปนี้ปฏิบัติหน้าที่แทน:</p>
+        </div>
+        <div class="border border-gray-800 p-4 rounded mb-6">
+            <table class="w-full text-base">
+                <tr><td class="font-bold w-32 py-1 align-top">ชื่อ-สกุล:</td><td id="print-new-name">...</td></tr>
+                <tr><td class="font-bold py-1 align-top">ตำแหน่ง:</td><td id="print-new-role">...</td></tr>
+                <tr><td class="font-bold py-1 align-top">หน่วยเลือกตั้งที่:</td><td id="print-new-station">...</td></tr>
+                <tr><td class="font-bold py-1 align-top">แขวง:</td><td id="print-new-subdistrict">...</td></tr>
+            </table>
+        </div>
+        <div class="mt-16 text-center">
+            <p class="mb-8">ลงชื่อ ...........................................................</p>
+            <p class="font-bold">(...........................................................)</p>
+			<!--
+            <p>ประธานกรรมการการเลือกตั้งประจำเขต</p>
+			-->
+        </div>
+        <div class="absolute bottom-0 left-0 w-full text-center text-xs text-gray-400 p-4">พิมพ์เมื่อ: <span id="print-date"></span></div>
+    </div>
+
+    <script>
+        const GAS_API_URL = "https://script.google.com/macros/s/AKfycby_6_KgQMpdGZLajHSTBzagfIHEA_F8xeBI_rLeOgmarioBFICf4c6Nup5e7EZKtkxf/exec";
+
+        let allOfficialsData = { active: [], history: [] }; // Store ALL data here
+        let currentAgency = null;
+        const SESSION_DURATION = 6 * 60 * 60 * 1000;
+        
+        // DOM Elements
+        const loginOverlay = document.getElementById('login-overlay');
+        const appContent = document.getElementById('app-content');
+        const resultsContainer = document.getElementById('results-container');
+        const searchInput = document.getElementById('search-input');
+        const stationFilter = document.getElementById('station-filter');
+        const subdistrictFilter = document.getElementById('subdistrict-filter');
+        const replacedFilter = document.getElementById('replaced-filter');
+        const noResults = document.getElementById('no-results');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const modal = document.getElementById('replace-modal');
+
+        async function apiCall(action, payload = {}) {
+            payload.action = action;
+            try {
+                const response = await fetch(GAS_API_URL, {
+                    method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(payload)
+                });
+                return await response.json();
+            } catch (error) {
+                console.error('API Error:', error);
+                throw new Error('การเชื่อมต่อขัดข้อง');
+            }
+        }
+
+        window.onload = () => { checkSession(); };
+
+        function checkSession() {
+            const storedAgency = localStorage.getItem('kpn_session_agency');
+            const storedExpiry = localStorage.getItem('kpn_session_expiry');
+            const now = new Date().getTime();
+
+            if (storedAgency && storedExpiry) {
+                if (now < parseInt(storedExpiry)) {
+                    currentAgency = storedAgency;
+                    loginOverlay.style.display = 'none';
+                    appContent.classList.remove('hidden');
+                    document.getElementById('user-display').innerText = currentAgency;
+                    
+                    initFilters();
+                    loadAllData(); // Load all data on session restore
+                } else {
+                    document.getElementById('session-status').innerText = 'Session หมดอายุ กรุณาเข้าสู่ระบบใหม่';
+                    document.getElementById('session-status').classList.remove('hidden');
+                    logout(false); 
+                }
+            }
+        }
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            const agency = document.getElementById('login-agency').value;
+            const password = document.getElementById('login-password').value;
+            const btn = document.getElementById('btn-login');
+
+            if(!agency || !password) { Swal.fire('Error', 'กรุณาระบุข้อมูลให้ครบถ้วน', 'warning'); return; }
+
+            btn.disabled = true; 
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> กำลังตรวจสอบ...';
+
+            try {
+                const res = await apiCall('login', { agency: agency, password: password });
+                if(res.status === 'success') {
+                    currentAgency = agency;
+                    const expiryTime = new Date().getTime() + SESSION_DURATION;
+                    localStorage.setItem('kpn_session_agency', agency);
+                    localStorage.setItem('kpn_session_expiry', expiryTime);
+
+                    loginOverlay.classList.add('opacity-0', 'pointer-events-none');
+                    setTimeout(() => { loginOverlay.style.display = 'none'; }, 300);
+                    appContent.classList.remove('hidden');
+                    document.getElementById('user-display').innerText = currentAgency;
+                    
+                    initFilters();
+                    loadAllData(); // Load all data on login
+                } else {
+                    Swal.fire('Login Failed', res.message, 'error');
+                }
+            } catch (err) {
+                Swal.fire('Error', err.message, 'error');
+            } finally {
+                btn.disabled = false; btn.innerHTML = '<i class="fas fa-sign-in-alt mr-2"></i> เข้าใช้งาน';
+            }
+        }
+
+        function logout(doReload = true) {
+            localStorage.removeItem('kpn_session_agency');
+            localStorage.removeItem('kpn_session_expiry');
+            if(doReload) location.reload();
+        }
+
+        async function initFilters() {
+            try {
+                const data = await apiCall('ch_getFilters');
+                populateDropdown(stationFilter, data.stations, 'หน่วยเลือกตั้ง');
+                populateDropdown(subdistrictFilter, data.subdistricts, 'แขวง');
+            } catch (error) { console.error('Error loading filters:', error); }
+        }
+
+        function populateDropdown(element, items, label) {
+            element.innerHTML = `<option value="">ทุก${label}</option>`;
+            items.forEach(item => {
+                const opt = document.createElement('option');
+                opt.value = item;
+                opt.innerText = typeof item === 'number' ? `หน่วยที่ ${item}` : item;
+                element.appendChild(opt);
+            });
+        }
+
+        // --- NEW: Load ALL Data Once ---
+        async function loadAllData() {
+            loadingSpinner.classList.remove('hidden');
+            resultsContainer.innerHTML = '';
+            noResults.classList.add('hidden');
+
+            try {
+                // Fetch EVERYTHING
+                const data = await apiCall('ch_getAllOfficials');
+                allOfficialsData = data; // Store in global variable
+                
+                loadingSpinner.classList.add('hidden');
+                filterAndRender(); // Render initial view
+            } catch (error) {
+                loadingSpinner.classList.add('hidden');
+                document.getElementById('result-count').innerText = 'เกิดข้อผิดพลาดในการโหลดข้อมูล';
+                Swal.fire('Error', error.message, 'error');
+            }
+        }
+
+        // --- NEW: Filter Logic (Client-Side) ---
+        function filterAndRender() {
+            const query = searchInput.value.toLowerCase().trim();
+            const station = stationFilter.value;
+            const subdistrict = subdistrictFilter.value;
+            const isReplaced = replacedFilter.checked;
+
+            const sourceArray = isReplaced ? allOfficialsData.history : allOfficialsData.active;
+            
+            const filtered = sourceArray.filter(item => {
+                // Filter by Station
+                if (station && String(item.station_number) !== String(station)) return false;
+                
+                // Filter by Subdistrict
+                if (subdistrict && String(item.subdistrict) !== String(subdistrict)) return false;
+                
+                // Filter by Query (Name, ID Card)
+                if (query) {
+                    const fullName = `${item.prefix || ''}${item.firstname} ${item.lastname}`.toLowerCase();
+                    const idCard = String(item.id_card || '');
+                    if (!fullName.includes(query) && !idCard.includes(query)) return false;
+                }
+
+                return true;
+            });
+
+            renderOfficials(filtered);
+        }
+
+        function renderOfficials(list) {
+            resultsContainer.innerHTML = '';
+            document.getElementById('result-count').innerText = `พบ ${list.length} รายการ`;
+
+            if (list.length === 0) {
+                noResults.classList.remove('hidden');
+            } else {
+                noResults.classList.add('hidden');
+                // Limit rendering to 50 items for UI performance if no filter
+                const displayList = list.slice(0, 100); 
+                displayList.forEach(item => {
+                    resultsContainer.appendChild(createCard(item));
+                });
+                if(list.length > 100) {
+                    const moreDiv = document.createElement('div');
+                    moreDiv.className = "col-span-full text-center text-gray-400 text-sm py-4";
+                    moreDiv.innerText = `... แสดงผล 100 จาก ${list.length} รายการ (กรุณาระบุคำค้นหาเพื่อดูเพิ่มเติม) ...`;
+                    resultsContainer.appendChild(moreDiv);
+                }
+            }
+        }
+
+        function createCard(item) {
+            const isReplaced = item.status === 'replaced';
+            const statusColor = isReplaced ? 'red' : 'green';
+            const statusText = isReplaced ? 'ถูกถอดถอนแล้ว' : 'ปกติ';
+            
+            const div = document.createElement('div');
+            div.className = `bg-white rounded-lg shadow-md p-5 border-t-4 border-${statusColor}-500 flex flex-col justify-between`;
+            
+            let btn = '';
+            let extra = '';
+
+            if (!isReplaced) {
+                btn = `<button onclick="openReplaceModal('${item.id}')" class="w-full mt-4 bg-red-50 text-red-600 border border-red-200 py-2 rounded hover:bg-red-600 hover:text-white transition">ถอดถอน / เปลี่ยนตัว</button>`;
+            } else {
+                if (item.replacement) {
+                    extra = `
+                        <div class="mt-3 bg-gray-50 p-2 rounded border border-gray-200 text-sm">
+                            <p class="text-xs text-gray-500">ผู้แทน:</p>
+                            <p class="font-bold text-blue-800">${item.replacement.prefix}${item.replacement.firstname} ${item.replacement.lastname}</p>
+                            <p class="text-xs text-gray-400">ID: ${item.replacement.id_card}</p>
+                        </div>
+                        <p class="text-xs text-gray-400 mt-2 text-right">เปลี่ยนเมื่อ: ${new Date(item.timestamp).toLocaleDateString('th-TH')}</p>
+                    `;
+                }
+                btn = `<button onclick="printReplacement('${item.id}')" class="w-full mt-4 bg-gray-800 text-white py-2 rounded hover:bg-black transition"><i class="fas fa-print"></i> พิมพ์คำสั่ง</button>`;
+            }
+
+            div.innerHTML = `
+                <div>
+                    <div class="flex justify-between mb-2">
+                        <span class="bg-${statusColor}-100 text-${statusColor}-800 text-xs px-2 py-1 rounded-full font-bold">${statusText}</span>
+                        <span class="text-gray-500 text-sm">หน่วยที่ ${item.station_number}</span>
+                    </div>
+                    <h3 class="text-lg font-bold text-gray-800 truncate">${item.prefix}${item.firstname} ${item.lastname}</h3>
+                    <p class="text-sm text-gray-500">${item.role}</p>
+                    <div class="text-sm text-gray-600 mt-2 space-y-1">
+                        <p><i class="fas fa-map-marker-alt text-gray-400 w-4"></i> แขวง${item.subdistrict}</p>
+                        <p class="text-xs font-mono text-gray-400">ID: ${item.id_card}</p>
+                    </div>
+                    ${extra}
+                </div>
+                ${btn}
+            `;
+            return div;
+        }
+
+        function openReplaceModal(id) {
+            // Find in current active list
+            const official = allOfficialsData.active.find(o => o.id === id);
+            if (!official) return;
+
+            document.getElementById('target-id').value = id;
+            document.getElementById('modal-station-id').innerText = official.station_number;
+            document.getElementById('modal-old-name').innerText = `${official.prefix}${official.firstname} ${official.lastname}`;
+            document.getElementById('modal-old-role').innerText = official.role;
+            document.getElementById('replacement-form').reset();
+            modal.classList.remove('hidden');
+        }
+
+        function closeModal() { modal.classList.add('hidden'); }
+
+        async function handleReplacementSubmit(event) {
+            event.preventDefault();
+            const btn = document.getElementById('btn-submit');
+            btn.disabled = true; btn.innerText = 'กำลังบันทึก...';
+            
+            try {
+                const fd = new FormData(event.target);
+                const payload = Object.fromEntries(fd.entries());
+                
+                const targetId = document.getElementById('target-id').value;
+                const originalOfficial = allOfficialsData.active.find(o => o.id === targetId);
+
+                if (!originalOfficial) throw new Error("ไม่พบข้อมูลกรรมการคนเดิม");
+
+                const res = await apiCall('ch_replaceOfficial', payload);
+                
+                if (res.status === 'success') {
+                    closeModal();
+
+                    // ============================================
+                    // UPDATE: เรียกโหลดข้อมูลทันที เพื่อให้ทำงานเบื้องหลังระหว่างที่ผู้ใช้กำลังจะพิมพ์
+                    // ============================================
+                    loadAllData();
+                    
+                    // Setup Print
+                    document.getElementById('print-old-name').innerText = `${originalOfficial.prefix}${originalOfficial.firstname} ${originalOfficial.lastname}`;
+                    document.getElementById('print-old-role').innerText = originalOfficial.role;
+                    document.getElementById('print-old-station').innerText = originalOfficial.station_number;
+                    document.getElementById('print-old-subdistrict').innerText = originalOfficial.subdistrict;
+                    
+                    document.getElementById('print-new-name').innerText = `${payload.new_prefix}${payload.new_firstname} ${payload.new_lastname}`;
+                    document.getElementById('print-new-role').innerText = originalOfficial.role;
+                    document.getElementById('print-new-station').innerText = originalOfficial.station_number;
+                    document.getElementById('print-new-subdistrict').innerText = originalOfficial.subdistrict;
+                    
+                    document.getElementById('print-date').innerText = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute:'2-digit' });
+
+                    Swal.fire({ 
+                        icon: 'success', 
+                        title: 'บันทึกสำเร็จ', 
+                        text: 'ระบบกำลังเปิดหน้าต่างพิมพ์เอกสาร...', 
+                        timer: 1500, 
+                        showConfirmButton: false 
+                    }).then(() => {
+                        window.print();
+                        // ลบ loadAllData() จากตรงนี้ เพราะย้ายไปเรียกข้างบนแล้ว
+                    });
+
+                } else { throw new Error(res.message); }
+            } catch (error) {
+                Swal.fire({ icon: 'error', title: 'ผิดพลาด', text: error.message });
+            } finally {
+                btn.disabled = false; btn.innerText = 'บันทึก & พิมพ์';
+            }
+        }
+
+        function printReplacement(id) {
+            // Find in history list
+            const official = allOfficialsData.history.find(o => o.id === id);
+            if (!official || !official.replacement) return;
+
+            document.getElementById('print-old-name').innerText = `${official.prefix}${official.firstname} ${official.lastname}`;
+            document.getElementById('print-old-role').innerText = official.role;
+            document.getElementById('print-old-station').innerText = official.station_number;
+            document.getElementById('print-old-subdistrict').innerText = official.subdistrict;
+            
+            document.getElementById('print-new-name').innerText = `${official.replacement.prefix}${official.replacement.firstname} ${official.replacement.lastname}`;
+            document.getElementById('print-new-role').innerText = official.role;
+            document.getElementById('print-new-station').innerText = official.station_number;
+            document.getElementById('print-new-subdistrict').innerText = official.subdistrict;
+            
+            document.getElementById('print-date').innerText = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute:'2-digit' });
+            window.print();
+        }
+
+		function exportToExcel() {
+			// 1. เลือกข้อมูลตาม Filter (เหมือนเดิม)
+			const list = replacedFilter.checked ? allOfficialsData.history : allOfficialsData.active;
+			
+			// ตรวจสอบว่ามีข้อมูลหรือไม่
+			if (!list || list.length === 0) { 
+				Swal.fire('แจ้งเตือน', 'ไม่มีข้อมูลให้ Export', 'info'); 
+				return; 
+			}
+
+			// 2. Map ข้อมูลให้ตรงกับคอลัมน์ A-N ในภาพ
+			const data = list.map(o => {
+				// ดึงข้อมูลผู้มาแทนที่ (ถ้ามี)
+				const rep = o.replacement || {};
+				// เช็คสถานะว่ามีการเปลี่ยนตัวหรือไม่ (ดูจาก status หรือ การมีอยู่ของ object replacement)
+				const hasReplacement = o.status === 'replaced' || (o.replacement && Object.keys(o.replacement).length > 0);
+
+				return {
+					// Col A: Timestamp (เวลาที่บันทึก)
+					//'Timestamp': o.timestamp || new Date().toLocaleString('th-TH'), 
+
+					// Col B: StationID (รหัสหน่วย - ต้องเช็คว่าใน DB เก็บชื่อ field นี้ว่าอะไร)
+					//'StationID': o.station_id || `sid_${String(o.station_number).padStart(3, '0')}`, 
+
+					// Col C: StationNumber (เลขหน่วย)
+					'หน่วยเลือกตั้งที่': o.station_number,
+
+					// Col D: SubDistrict (แขวง)
+					'แขวง': o.subdistrict,
+
+					// Col E: RoleID (รหัสตำแหน่ง เช่น P2, P10)
+					//'RoleID': o.role_id || '', 
+
+					// Col F: RoleTitle (ชื่อตำแหน่ง)
+					'ตำแหน่ง': o.role, // หรือ o.role_title แล้วแต่ว่าใน object เก็บชื่อไหน
+
+					// --- ข้อมูลเดิม (Old) ---
+					// Col G: Old_Prefix
+					'Old_Prefix': o.prefix,
+					// Col H: Old_Name (รวมชื่อ-สกุล)
+					'Old_Name': `${o.firstname} ${o.lastname}`.trim(),
+					// Col I: Old_IDCard
+					'Old_IDCard': o.id_card, // อาจจะใส่ '...' นำหน้าถ้า Excel แปลงเป็น sci-notation
+
+					// --- ข้อมูลใหม่ (New) ---
+					// Col J: New_Prefix
+					'New_Prefix': hasReplacement ? (rep.prefix || '-') : '',
+					// Col K: New_Name
+					'New_Name': hasReplacement ? `${rep.firstname || ''} ${rep.lastname || ''}`.trim() : '',
+					// Col L: New_IDCard
+					'New_IDCard': hasReplacement ? (rep.id_card || '-') : '',
+					// Col M: New_Phone
+					'New_Phone': hasReplacement ? (rep.phone || '-') : '',
+					// Col N: New_Address
+					//'New_Address': hasReplacement ? (rep.address || '-') : ''
+				};
+			});
+
+			// 3. สร้าง Worksheet
+			const ws = XLSX.utils.json_to_sheet(data);
+
+			// (Optional) จัดความกว้างคอลัมน์ให้สวยงาม
+			const wscols = [
+				//{wch: 20}, // A: Timestamp
+				//{wch: 10}, // B: StationID
+				{wch: 10}, // C: StationNumber
+				{wch: 15}, // D: SubDistrict
+				//{wch: 10}, // E: RoleID
+				{wch: 20}, // F: RoleTitle
+				{wch: 10}, // G: Old_Prefix
+				{wch: 25}, // H: Old_Name
+				{wch: 15}, // I: Old_IDCard
+				{wch: 10}, // J: New_Prefix
+				{wch: 25}, // K: New_Name
+				{wch: 15}, // L: New_IDCard
+				{wch: 15}, // M: New_Phone
+				//{wch: 30}  // N: New_Address
+			];
+			ws['!cols'] = wscols;
+
+			// 4. สร้าง Workbook และ Download
+			const wb = XLSX.utils.book_new();
+			// ตั้งชื่อ Sheet ว่า ReplacementHistory ตามภาพตัวอย่าง
+			XLSX.utils.book_append_sheet(wb, ws, "ReplacementHistory"); 
+			XLSX.writeFile(wb, `Report_Officials_${new Date().toISOString().slice(0,10)}.xlsx`);
+		}
+        
+        // Event Listeners for Client-Side Filter
+        searchInput.addEventListener('input', filterAndRender);
+        stationFilter.addEventListener('change', filterAndRender);
+        subdistrictFilter.addEventListener('change', filterAndRender);
+        replacedFilter.addEventListener('change', filterAndRender);
+    </script>
+</body>
+</html>
