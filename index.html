@@ -258,9 +258,12 @@
     </div>
 
     <script>
+        // ==========================================
+        // กำหนด URL ของ Google Apps Script Web App ที่นี่
+        // ==========================================
         const GAS_API_URL = "https://script.google.com/macros/s/AKfycby_6_KgQMpdGZLajHSTBzagfIHEA_F8xeBI_rLeOgmarioBFICf4c6Nup5e7EZKtkxf/exec";
 
-        let allOfficialsData = { active: [], history: [] }; // Store ALL data here
+        let allOfficialsData = { active: [], history: [] }; 
         let currentAgency = null;
         const SESSION_DURATION = 6 * 60 * 60 * 1000;
         
@@ -304,7 +307,7 @@
                     document.getElementById('user-display').innerText = currentAgency;
                     
                     initFilters();
-                    loadAllData(); // Load all data on session restore
+                    loadAllData(); 
                 } else {
                     document.getElementById('session-status').innerText = 'Session หมดอายุ กรุณาเข้าสู่ระบบใหม่';
                     document.getElementById('session-status').classList.remove('hidden');
@@ -338,7 +341,7 @@
                     document.getElementById('user-display').innerText = currentAgency;
                     
                     initFilters();
-                    loadAllData(); // Load all data on login
+                    loadAllData(); 
                 } else {
                     Swal.fire('Login Failed', res.message, 'error');
                 }
@@ -358,8 +361,13 @@
         async function initFilters() {
             try {
                 const data = await apiCall('ch_getFilters');
-                populateDropdown(stationFilter, data.stations, 'หน่วยเลือกตั้ง');
-                populateDropdown(subdistrictFilter, data.subdistricts, 'แขวง');
+                // เพิ่มการตรวจสอบข้อผิดพลาดจาก Backend
+                if (data && data.status === 'error') {
+                    console.error('Error from server (Filters):', data.message);
+                    return;
+                }
+                populateDropdown(stationFilter, data.stations || [], 'หน่วยเลือกตั้ง');
+                populateDropdown(subdistrictFilter, data.subdistricts || [], 'แขวง');
             } catch (error) { console.error('Error loading filters:', error); }
         }
 
@@ -373,28 +381,37 @@
             });
         }
 
-        // --- NEW: Load ALL Data Once ---
         async function loadAllData() {
             loadingSpinner.classList.remove('hidden');
             resultsContainer.innerHTML = '';
             noResults.classList.add('hidden');
 
             try {
-                // Fetch EVERYTHING
                 const data = await apiCall('ch_getAllOfficials');
-                allOfficialsData = data; // Store in global variable
+                
+                // ดักจับ Error หากเซิร์ฟเวอร์ส่งข้อความผิดพลาดกลับมา
+                if (data && data.status === 'error') {
+                    throw new Error(data.message);
+                }
+                
+                allOfficialsData = data; 
                 
                 loadingSpinner.classList.add('hidden');
-                filterAndRender(); // Render initial view
+                filterAndRender(); 
             } catch (error) {
                 loadingSpinner.classList.add('hidden');
                 document.getElementById('result-count').innerText = 'เกิดข้อผิดพลาดในการโหลดข้อมูล';
-                Swal.fire('Error', error.message, 'error');
+                // นำ Error จริงมาแสดงแทนการปล่อยให้ตัวแปรพังแล้วแจ้ง filter
+                Swal.fire('ข้อผิดพลาด', `ไม่สามารถโหลดข้อมูลรายชื่อได้: ${error.message}`, 'error');
             }
         }
 
-        // --- NEW: Filter Logic (Client-Side) ---
         function filterAndRender() {
+            // เพื่อป้องกันการพัง หากเกิดเหตุการณ์ที่ allOfficialsData ไม่มีโครงสร้างที่ถูกต้อง
+            if (!allOfficialsData || typeof allOfficialsData !== 'object' || !allOfficialsData.active) {
+                return; // หยุดการทำงานถ้าข้อมูลไม่พร้อม
+            }
+
             const query = searchInput.value.toLowerCase().trim();
             const station = stationFilter.value;
             const subdistrict = subdistrictFilter.value;
@@ -403,19 +420,14 @@
             const sourceArray = isReplaced ? allOfficialsData.history : allOfficialsData.active;
             
             const filtered = sourceArray.filter(item => {
-                // Filter by Station
                 if (station && String(item.station_number) !== String(station)) return false;
-                
-                // Filter by Subdistrict
                 if (subdistrict && String(item.subdistrict) !== String(subdistrict)) return false;
                 
-                // Filter by Query (Name, ID Card)
                 if (query) {
                     const fullName = `${item.prefix || ''}${item.firstname} ${item.lastname}`.toLowerCase();
                     const idCard = String(item.id_card || '');
                     if (!fullName.includes(query) && !idCard.includes(query)) return false;
                 }
-
                 return true;
             });
 
@@ -430,7 +442,6 @@
                 noResults.classList.remove('hidden');
             } else {
                 noResults.classList.add('hidden');
-                // Limit rendering to 50 items for UI performance if no filter
                 const displayList = list.slice(0, 100); 
                 displayList.forEach(item => {
                     resultsContainer.appendChild(createCard(item));
@@ -465,7 +476,7 @@
                             <p class="font-bold text-blue-800">${item.replacement.prefix}${item.replacement.firstname} ${item.replacement.lastname}</p>
                             <p class="text-xs text-gray-400">ID: ${item.replacement.id_card}</p>
                         </div>
-                        <p class="text-xs text-gray-400 mt-2 text-right">เปลี่ยนเมื่อ: ${new Date(item.timestamp).toLocaleDateString('th-TH')}</p>
+                        <p class="text-xs text-gray-400 mt-2 text-right">เปลี่ยนเมื่อ: ${item.timestamp ? new Date(item.timestamp).toLocaleDateString('th-TH') : '-'}</p>
                     `;
                 }
                 btn = `<button onclick="printReplacement('${item.id}')" class="w-full mt-4 bg-gray-800 text-white py-2 rounded hover:bg-black transition"><i class="fas fa-print"></i> พิมพ์คำสั่ง</button>`;
@@ -491,7 +502,6 @@
         }
 
         function openReplaceModal(id) {
-            // Find in current active list
             const official = allOfficialsData.active.find(o => o.id === id);
             if (!official) return;
 
@@ -523,13 +533,10 @@
                 
                 if (res.status === 'success') {
                     closeModal();
-
-                    // ============================================
-                    // UPDATE: เรียกโหลดข้อมูลทันที เพื่อให้ทำงานเบื้องหลังระหว่างที่ผู้ใช้กำลังจะพิมพ์
-                    // ============================================
+                    
+                    // เรียกโหลดข้อมูลมาใหม่เพื่ออัปเดตสถานะล่าสุด
                     loadAllData();
                     
-                    // Setup Print
                     document.getElementById('print-old-name').innerText = `${originalOfficial.prefix}${originalOfficial.firstname} ${originalOfficial.lastname}`;
                     document.getElementById('print-old-role').innerText = originalOfficial.role;
                     document.getElementById('print-old-station').innerText = originalOfficial.station_number;
@@ -550,7 +557,6 @@
                         showConfirmButton: false 
                     }).then(() => {
                         window.print();
-                        // ลบ loadAllData() จากตรงนี้ เพราะย้ายไปเรียกข้างบนแล้ว
                     });
 
                 } else { throw new Error(res.message); }
@@ -562,7 +568,6 @@
         }
 
         function printReplacement(id) {
-            // Find in history list
             const official = allOfficialsData.history.find(o => o.id === id);
             if (!official || !official.replacement) return;
 
@@ -581,93 +586,52 @@
         }
 
 		function exportToExcel() {
-			// 1. เลือกข้อมูลตาม Filter (เหมือนเดิม)
 			const list = replacedFilter.checked ? allOfficialsData.history : allOfficialsData.active;
 			
-			// ตรวจสอบว่ามีข้อมูลหรือไม่
 			if (!list || list.length === 0) { 
 				Swal.fire('แจ้งเตือน', 'ไม่มีข้อมูลให้ Export', 'info'); 
 				return; 
 			}
 
-			// 2. Map ข้อมูลให้ตรงกับคอลัมน์ A-N ในภาพ
 			const data = list.map(o => {
-				// ดึงข้อมูลผู้มาแทนที่ (ถ้ามี)
 				const rep = o.replacement || {};
-				// เช็คสถานะว่ามีการเปลี่ยนตัวหรือไม่ (ดูจาก status หรือ การมีอยู่ของ object replacement)
 				const hasReplacement = o.status === 'replaced' || (o.replacement && Object.keys(o.replacement).length > 0);
 
 				return {
-					// Col A: Timestamp (เวลาที่บันทึก)
-					//'Timestamp': o.timestamp || new Date().toLocaleString('th-TH'), 
-
-					// Col B: StationID (รหัสหน่วย - ต้องเช็คว่าใน DB เก็บชื่อ field นี้ว่าอะไร)
-					//'StationID': o.station_id || `sid_${String(o.station_number).padStart(3, '0')}`, 
-
-					// Col C: StationNumber (เลขหน่วย)
 					'หน่วยเลือกตั้งที่': o.station_number,
-
-					// Col D: SubDistrict (แขวง)
 					'แขวง': o.subdistrict,
-
-					// Col E: RoleID (รหัสตำแหน่ง เช่น P2, P10)
-					//'RoleID': o.role_id || '', 
-
-					// Col F: RoleTitle (ชื่อตำแหน่ง)
-					'ตำแหน่ง': o.role, // หรือ o.role_title แล้วแต่ว่าใน object เก็บชื่อไหน
-
-					// --- ข้อมูลเดิม (Old) ---
-					// Col G: Old_Prefix
+					'ตำแหน่ง': o.role, 
 					'Old_Prefix': o.prefix,
-					// Col H: Old_Name (รวมชื่อ-สกุล)
 					'Old_Name': `${o.firstname} ${o.lastname}`.trim(),
-					// Col I: Old_IDCard
-					'Old_IDCard': o.id_card, // อาจจะใส่ '...' นำหน้าถ้า Excel แปลงเป็น sci-notation
-
-					// --- ข้อมูลใหม่ (New) ---
-					// Col J: New_Prefix
+					'Old_IDCard': o.id_card, 
 					'New_Prefix': hasReplacement ? (rep.prefix || '-') : '',
-					// Col K: New_Name
 					'New_Name': hasReplacement ? `${rep.firstname || ''} ${rep.lastname || ''}`.trim() : '',
-					// Col L: New_IDCard
 					'New_IDCard': hasReplacement ? (rep.id_card || '-') : '',
-					// Col M: New_Phone
-					'New_Phone': hasReplacement ? (rep.phone || '-') : '',
-					// Col N: New_Address
-					//'New_Address': hasReplacement ? (rep.address || '-') : ''
+					'New_Phone': hasReplacement ? (rep.phone || '-') : ''
 				};
 			});
 
-			// 3. สร้าง Worksheet
 			const ws = XLSX.utils.json_to_sheet(data);
 
-			// (Optional) จัดความกว้างคอลัมน์ให้สวยงาม
 			const wscols = [
-				//{wch: 20}, // A: Timestamp
-				//{wch: 10}, // B: StationID
-				{wch: 10}, // C: StationNumber
-				{wch: 15}, // D: SubDistrict
-				//{wch: 10}, // E: RoleID
-				{wch: 20}, // F: RoleTitle
-				{wch: 10}, // G: Old_Prefix
-				{wch: 25}, // H: Old_Name
-				{wch: 15}, // I: Old_IDCard
-				{wch: 10}, // J: New_Prefix
-				{wch: 25}, // K: New_Name
-				{wch: 15}, // L: New_IDCard
-				{wch: 15}, // M: New_Phone
-				//{wch: 30}  // N: New_Address
+				{wch: 10}, 
+				{wch: 15}, 
+				{wch: 20}, 
+				{wch: 10}, 
+				{wch: 25}, 
+				{wch: 15}, 
+				{wch: 10}, 
+				{wch: 25}, 
+				{wch: 15}, 
+				{wch: 15}
 			];
 			ws['!cols'] = wscols;
 
-			// 4. สร้าง Workbook และ Download
 			const wb = XLSX.utils.book_new();
-			// ตั้งชื่อ Sheet ว่า ReplacementHistory ตามภาพตัวอย่าง
 			XLSX.utils.book_append_sheet(wb, ws, "ReplacementHistory"); 
 			XLSX.writeFile(wb, `Report_Officials_${new Date().toISOString().slice(0,10)}.xlsx`);
 		}
         
-        // Event Listeners for Client-Side Filter
         searchInput.addEventListener('input', filterAndRender);
         stationFilter.addEventListener('change', filterAndRender);
         subdistrictFilter.addEventListener('change', filterAndRender);
