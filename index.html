@@ -527,7 +527,7 @@
         async function handleReplacementSubmit(event) {
             event.preventDefault();
             const btn = document.getElementById('btn-submit');
-            btn.disabled = true; btn.innerText = 'กำลังบันทึก...';
+            btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> กำลังบันทึก...';
             
             try {
                 const fd = new FormData(event.target);
