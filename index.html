@@ -460,8 +460,20 @@
             const statusColor = isReplaced ? 'red' : 'green';
             const statusText = isReplaced ? 'ถูกถอดถอนแล้ว' : 'ปกติ';
             
+            // --- เพิ่มการตรวจสอบว่าเป็น "ตัวแทนใหม่" หรือไม่ ---
+            let isNewReplacement = false;
+            if (!isReplaced && allOfficialsData && allOfficialsData.history) {
+                // เช็คว่าในประวัติ (history) เคยมีการเปลี่ยนตัวในหน่วยเดียวกันและตำแหน่งเดียวกันหรือไม่
+                isNewReplacement = allOfficialsData.history.some(h => 
+                    String(h.station_number) === String(item.station_number) && 
+                    h.role === item.role
+                );
+            }
+
             const div = document.createElement('div');
-            div.className = `bg-white rounded-lg shadow-md p-5 border-t-4 border-${statusColor}-500 flex flex-col justify-between`;
+            // กำหนดสีขอบบนของการ์ด: แดง(ถูกถอด) -> ม่วง(เป็นตัวแทนใหม่) -> เขียว(คนเดิมปกติ)
+            const borderColorClass = isReplaced ? 'border-red-500' : (isNewReplacement ? 'border-purple-500' : 'border-green-500');
+            div.className = `bg-white rounded-lg shadow-md p-5 border-t-4 ${borderColorClass} flex flex-col justify-between`;
             
             let btn = '';
             let extra = '';
@@ -491,13 +503,19 @@
                 btn = `<button onclick="printReplacement('${item.id}')" class="w-full mt-4 bg-gray-800 text-white py-2 rounded hover:bg-black transition"><i class="fas fa-print"></i> พิมพ์คำสั่ง</button>`;
             }
 
+            // ป้ายกำกับตัวแทนใหม่ (แสดงเฉพาะหน้าปกติและเป็นตัวแทนใหม่)
+            const badgeNew = isNewReplacement ? `<span class="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded-full font-bold flex items-center gap-1 shadow-sm" title="บุคคลนี้เข้ามาปฏิบัติหน้าที่แทนคนเก่า"><i class="fas fa-exchange-alt"></i> ตัวแทนใหม่</span>` : '';
+
             div.innerHTML = `
                 <div>
-                    <div class="flex justify-between mb-2">
-                        <span class="bg-${statusColor}-100 text-${statusColor}-800 text-xs px-2 py-1 rounded-full font-bold">${statusText}</span>
-                        <span class="text-gray-500 text-sm">หน่วยที่ ${item.station_number}</span>
+                    <div class="flex justify-between mb-2 items-start">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="bg-${statusColor}-100 text-${statusColor}-800 text-xs px-2 py-1 rounded-full font-bold">${statusText}</span>
+                            ${badgeNew}
+                        </div>
+                        <span class="text-gray-500 text-sm whitespace-nowrap ml-2">หน่วยที่ ${item.station_number}</span>
                     </div>
-                    <h3 class="text-lg font-bold text-gray-800 truncate">${item.prefix}${item.firstname} ${item.lastname}</h3>
+                    <h3 class="text-lg font-bold text-gray-800 truncate mt-1">${item.prefix}${item.firstname} ${item.lastname}</h3>
                     <p class="text-sm text-gray-500">${item.role}</p>
                     <div class="text-sm text-gray-600 mt-2 space-y-1">
                         <p><i class="fas fa-map-marker-alt text-gray-400 w-4"></i> แขวง${item.subdistrict}</p>
