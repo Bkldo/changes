@@ -140,6 +140,14 @@
                         </label>
                     </div>
 
+                    <div id="history-date-filter-wrap" class="w-full md:w-48 relative hidden">
+                        <label class="text-sm text-gray-500 mb-1 block">วันที่เปลี่ยน</label>
+                        <div class="relative">
+                            <input type="date" id="history-date-filter" class="w-full pl-3 pr-8 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                            <i class="fas fa-calendar-day absolute right-3 top-3.5 text-gray-400 pointer-events-none text-xs"></i>
+                        </div>
+                    </div>
+
                     <div class="flex gap-2 w-full md:w-auto flex-wrap lg:flex-nowrap">
                         <button onclick="loadAllData()" class="flex-1 md:flex-none bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2 shadow" title="โหลดข้อมูลใหม่จาก Server">
                             <i class="fas fa-sync-alt"></i> อัปเดตข้อมูล
@@ -275,6 +283,8 @@
         const stationFilter = document.getElementById('station-filter');
         const subdistrictFilter = document.getElementById('subdistrict-filter');
         const replacedFilter = document.getElementById('replaced-filter');
+        const historyDateFilterWrap = document.getElementById('history-date-filter-wrap');
+        const historyDateFilter = document.getElementById('history-date-filter');
         const noResults = document.getElementById('no-results');
         const loadingSpinner = document.getElementById('loading-spinner');
         const modal = document.getElementById('replace-modal');
@@ -381,6 +391,31 @@
             });
         }
 
+        function formatDateInputValue(date) {
+            const d = date instanceof Date ? date : new Date(date);
+            if (Number.isNaN(d.getTime())) return '';
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        function setDefaultHistoryDate() {
+            if (historyDateFilter && !historyDateFilter.value) {
+                historyDateFilter.value = formatDateInputValue(new Date());
+            }
+        }
+
+        function updateHistoryDateFilterVisibility() {
+            if (!historyDateFilterWrap) return;
+            if (replacedFilter.checked) {
+                setDefaultHistoryDate();
+                historyDateFilterWrap.classList.remove('hidden');
+            } else {
+                historyDateFilterWrap.classList.add('hidden');
+            }
+        }
+
         async function loadAllData() {
             loadingSpinner.classList.remove('hidden');
             resultsContainer.innerHTML = '';
@@ -416,12 +451,15 @@
             const station = stationFilter.value;
             const subdistrict = subdistrictFilter.value;
             const isReplaced = replacedFilter.checked;
+            updateHistoryDateFilterVisibility();
+            const selectedHistoryDate = isReplaced && historyDateFilter ? historyDateFilter.value : '';
 
             const sourceArray = isReplaced ? allOfficialsData.history : allOfficialsData.active;
             
             const filtered = sourceArray.filter(item => {
                 if (station && String(item.station_number) !== String(station)) return false;
                 if (subdistrict && String(item.subdistrict) !== String(subdistrict)) return false;
+                if (selectedHistoryDate && formatDateInputValue(item.timestamp) !== selectedHistoryDate) return false;
                 
                 if (query) {
                     const fullName = `${item.prefix || ''}${item.firstname} ${item.lastname}`.toLowerCase();
@@ -796,6 +834,9 @@
         stationFilter.addEventListener('change', filterAndRender);
         subdistrictFilter.addEventListener('change', filterAndRender);
         replacedFilter.addEventListener('change', filterAndRender);
+        historyDateFilter.addEventListener('change', filterAndRender);
+        setDefaultHistoryDate();
+        updateHistoryDateFilterVisibility();
     </script>
 </body>
 </html>
