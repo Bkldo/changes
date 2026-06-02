@@ -500,7 +500,12 @@
                         <p class="text-xs text-gray-400 mt-2 text-right">เปลี่ยนเมื่อ: ${timeStr}</p>
                     `;
                 }
-                btn = `<button onclick="printReplacement('${item.id}')" class="w-full mt-4 bg-gray-800 text-white py-2 rounded hover:bg-black transition"><i class="fas fa-print"></i> พิมพ์คำสั่ง</button>`;
+                btn = `
+                    <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <button onclick="printReplacement('${item.id}')" class="w-full bg-gray-800 text-white py-2 rounded hover:bg-black transition"><i class="fas fa-print"></i> พิมพ์หนังสือรับรอง</button>
+                        <button onclick="createRealOrder('${item.id}', event)" class="w-full bg-blue-700 text-white py-2 rounded hover:bg-blue-800 transition"><i class="fas fa-file-pdf"></i> พิมพ์คำสั่งจริง</button>
+                    </div>
+                `;
             }
 
             // ป้ายกำกับตัวแทนใหม่ (แสดงเฉพาะหน้าปกติและเป็นตัวแทนใหม่)
@@ -610,6 +615,99 @@
             
             document.getElementById('print-date').innerText = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute:'2-digit' });
             window.print();
+        }
+
+        async function createRealOrder(id, event, forceCreate = false) {
+            const btn = event && event.currentTarget ? event.currentTarget : null;
+
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> กำลังสร้าง...';
+            }
+
+            Swal.fire({
+                title: 'กำลังสร้างคำสั่งจริง',
+                text: 'ระบบกำลังสร้างเอกสารจาก Google Doc template',
+                allowOutsideClick: false,
+                didOpen: () => Swal.showLoading()
+            });
+
+            try {
+                const res = await apiCall('ch_createRealOrder', { history_id: id, force_create: forceCreate });
+                if (res.status === 'exists') {
+                    const existing = res.existing || {};
+                    const choice = await Swal.fire({
+                        icon: 'info',
+                        title: 'หน่วยนี้มีคำสั่งจริงแล้ว',
+                        html: `
+                            <div class="text-left space-y-2">
+                                <p>หน่วยเลือกตั้งที่ ${existing.stationNumberThai || existing.stationNumber || ''} เคยสร้างเอกสารรายงานไปแล้ว</p>
+                                <p class="text-sm text-gray-500">${existing.fileName || ''}</p>
+                            </div>
+                        `,
+                        showCancelButton: true,
+                        showDenyButton: true,
+                        confirmButtonText: 'ใช้ของเดิม',
+                        denyButtonText: 'สร้างใหม่',
+                        cancelButtonText: 'ยกเลิก'
+                    });
+
+                    if (choice.isConfirmed) {
+                        showRealOrderSuccessAlert(existing);
+                        return;
+                    }
+
+                    if (choice.isDenied) {
+                        await createRealOrder(id, event, true);
+                        return;
+                    }
+
+                    return;
+                }
+                if (res.status !== 'success') throw new Error(res.message || 'สร้างเอกสารไม่สำเร็จ');
+
+                showRealOrderSuccessAlert(res);
+            } catch (error) {
+                Swal.fire({ icon: 'error', title: 'ผิดพลาด', text: error.message });
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-file-pdf"></i> พิมพ์คำสั่งจริง';
+                }
+            }
+        }
+
+        function showRealOrderSuccessAlert(fileInfo) {
+            const pdfUrl = fileInfo && fileInfo.pdfUrl ? escapeHtml(fileInfo.pdfUrl) : '';
+            const docUrl = fileInfo && fileInfo.docUrl ? escapeHtml(fileInfo.docUrl) : '';
+            const links = [
+                pdfUrl ? `<a class="block text-blue-700 underline" href="${pdfUrl}" target="_blank" rel="noopener">เปิด PDF สำหรับพิมพ์</a>` : '',
+                docUrl ? `<a class="block text-blue-700 underline" href="${docUrl}" target="_blank" rel="noopener">เปิด Google Doc</a>` : ''
+            ].join('');
+
+            return Swal.fire({
+                icon: 'success',
+                title: 'สร้างคำสั่งจริงสำเร็จ',
+                html: `
+                    <div class="space-y-2 text-left">
+                        <p class="text-gray-600">กรุณาคลิกลิงก์ด้านล่างเพื่อเปิดไฟล์คำสั่งจริง</p>
+                        ${links || '<p class="text-gray-500">ไม่พบลิงก์ไฟล์คำสั่งจริง</p>'}
+                    </div>
+                `,
+                confirmButtonText: 'ตกลง'
+            });
+        }
+
+        function escapeHtml(value) {
+            return String(value).replace(/[&<>"']/g, function(char) {
+                return {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#39;'
+                }[char];
+            });
         }
 
 		function exportToExcel() {
