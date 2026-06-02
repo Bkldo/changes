@@ -503,7 +503,7 @@
                 btn = `
                     <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <button onclick="printReplacement('${item.id}')" class="w-full bg-gray-800 text-white py-2 rounded hover:bg-black transition"><i class="fas fa-print"></i> พิมพ์หนังสือรับรอง</button>
-                        <button onclick="createRealOrder('${item.id}', event)" class="w-full bg-blue-700 text-white py-2 rounded hover:bg-blue-800 transition"><i class="fas fa-file-pdf"></i> พิมพ์คำสั่งจริง</button>
+                        <button onclick="createRealOrder('${item.id}', event)" class="w-full bg-blue-700 text-white py-2 rounded hover:bg-blue-800 transition"><i class="fas fa-file-pdf"></i> พิมพ์คำสั่ง</button>
                     </div>
                 `;
             }
@@ -631,7 +631,7 @@
             }
 
             Swal.fire({
-                title: 'กำลังสร้างคำสั่งจริง',
+                title: 'กำลังสร้างคำสั่ง',
                 text: 'ระบบกำลังสร้างเอกสารจาก Google Doc template',
                 allowOutsideClick: false,
                 didOpen: () => Swal.showLoading()
@@ -643,7 +643,7 @@
                     const existing = res.existing || {};
                     const choice = await Swal.fire({
                         icon: 'info',
-                        title: `${getRealOrderReportModeLabel(reportMode)}นี้มีคำสั่งจริงแล้ว`,
+                        title: `${getRealOrderReportModeLabel(reportMode)}นี้มีคำสั่งแล้ว`,
                         html: `
                             <div class="text-left space-y-2">
                                 <p>${getRealOrderReportModeLabel(reportMode)} หน่วยเลือกตั้งที่ ${existing.stationNumberThai || existing.stationNumber || ''} เคยสร้างเอกสารรายงานไปแล้ว</p>
@@ -677,7 +677,7 @@
             } finally {
                 if (btn) {
                     btn.disabled = false;
-                    btn.innerHTML = '<i class="fas fa-file-pdf"></i> พิมพ์คำสั่งจริง';
+                    btn.innerHTML = '<i class="fas fa-file-pdf"></i> พิมพ์คำสั่ง';
                 }
             }
         }
@@ -685,7 +685,7 @@
         async function selectRealOrderReportMode() {
             const choice = await Swal.fire({
                 icon: 'question',
-                title: 'เลือกแบบสร้างคำสั่งจริง',
+                title: 'เลือกแบบสร้างคำสั่ง',
                 html: `
                     <div class="text-left space-y-2">
                         <p class="text-gray-700">เลือกว่าจะสร้างคำสั่งสำหรับรายการที่กดเพียงคนเดียว หรือรวมทุกคนที่ถูกเพิ่ม/เปลี่ยนแปลงภายหลังในหน่วยเดียวกัน</p>
@@ -719,12 +719,12 @@
 
             return Swal.fire({
                 icon: 'success',
-                title: 'สร้างคำสั่งจริงสำเร็จ',
+                title: 'สร้างคำสั่งสำเร็จ',
                 html: `
                     <div class="space-y-2 text-left">
                         ${modeLabel ? `<p class="font-semibold text-gray-700">${modeLabel}</p>` : ''}
-                        <p class="text-gray-600">กรุณาคลิกลิงก์ด้านล่างเพื่อเปิดไฟล์คำสั่งจริง</p>
-                        ${links || '<p class="text-gray-500">ไม่พบลิงก์ไฟล์คำสั่งจริง</p>'}
+                        <p class="text-gray-600">กรุณาคลิกลิงก์ด้านล่างเพื่อเปิดไฟล์คำสั่ง</p>
+                        ${links || '<p class="text-gray-500">ไม่พบลิงก์ไฟล์คำสั่ง</p>'}
                     </div>
                 `,
                 confirmButtonText: 'ตกลง'
