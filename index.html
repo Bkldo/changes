@@ -617,7 +617,12 @@
             window.print();
         }
 
-        async function createRealOrder(id, event, forceCreate = false) {
+        async function createRealOrder(id, event, forceCreate = false, reportMode = null) {
+            if (!reportMode) {
+                reportMode = await selectRealOrderReportMode();
+                if (!reportMode) return;
+            }
+
             const btn = event && event.currentTarget ? event.currentTarget : null;
 
             if (btn) {
@@ -633,15 +638,15 @@
             });
 
             try {
-                const res = await apiCall('ch_createRealOrder', { history_id: id, force_create: forceCreate });
+                const res = await apiCall('ch_createRealOrder', { history_id: id, force_create: forceCreate, report_mode: reportMode });
                 if (res.status === 'exists') {
                     const existing = res.existing || {};
                     const choice = await Swal.fire({
                         icon: 'info',
-                        title: 'หน่วยนี้มีคำสั่งจริงแล้ว',
+                        title: `${getRealOrderReportModeLabel(reportMode)}นี้มีคำสั่งจริงแล้ว`,
                         html: `
                             <div class="text-left space-y-2">
-                                <p>หน่วยเลือกตั้งที่ ${existing.stationNumberThai || existing.stationNumber || ''} เคยสร้างเอกสารรายงานไปแล้ว</p>
+                                <p>${getRealOrderReportModeLabel(reportMode)} หน่วยเลือกตั้งที่ ${existing.stationNumberThai || existing.stationNumber || ''} เคยสร้างเอกสารรายงานไปแล้ว</p>
                                 <p class="text-sm text-gray-500">${existing.fileName || ''}</p>
                             </div>
                         `,
@@ -658,7 +663,7 @@
                     }
 
                     if (choice.isDenied) {
-                        await createRealOrder(id, event, true);
+                        await createRealOrder(id, event, true, reportMode);
                         return;
                     }
 
@@ -677,9 +682,36 @@
             }
         }
 
+        async function selectRealOrderReportMode() {
+            const choice = await Swal.fire({
+                icon: 'question',
+                title: 'เลือกแบบสร้างคำสั่งจริง',
+                html: `
+                    <div class="text-left space-y-2">
+                        <p class="text-gray-700">เลือกว่าจะสร้างคำสั่งสำหรับรายการที่กดเพียงคนเดียว หรือรวมทุกคนที่ถูกเพิ่ม/เปลี่ยนแปลงภายหลังในหน่วยเดียวกัน</p>
+                    </div>
+                `,
+                showDenyButton: true,
+                showCancelButton: true,
+                confirmButtonText: 'รายบุคคล',
+                denyButtonText: 'รายหน่วย',
+                cancelButtonText: 'ยกเลิก',
+                reverseButtons: true
+            });
+
+            if (choice.isConfirmed) return 'individual';
+            if (choice.isDenied) return 'station';
+            return null;
+        }
+
+        function getRealOrderReportModeLabel(reportMode) {
+            return reportMode === 'individual' ? 'รายบุคคล' : 'รายหน่วย';
+        }
+
         function showRealOrderSuccessAlert(fileInfo) {
             const pdfUrl = fileInfo && fileInfo.pdfUrl ? escapeHtml(fileInfo.pdfUrl) : '';
             const docUrl = fileInfo && fileInfo.docUrl ? escapeHtml(fileInfo.docUrl) : '';
+            const modeLabel = fileInfo && fileInfo.reportModeLabel ? escapeHtml(fileInfo.reportModeLabel) : '';
             const links = [
                 pdfUrl ? `<a class="block text-blue-700 underline" href="${pdfUrl}" target="_blank" rel="noopener">เปิด PDF สำหรับพิมพ์</a>` : '',
                 docUrl ? `<a class="block text-blue-700 underline" href="${docUrl}" target="_blank" rel="noopener">เปิด Google Doc</a>` : ''
@@ -690,6 +722,7 @@
                 title: 'สร้างคำสั่งจริงสำเร็จ',
                 html: `
                     <div class="space-y-2 text-left">
+                        ${modeLabel ? `<p class="font-semibold text-gray-700">${modeLabel}</p>` : ''}
                         <p class="text-gray-600">กรุณาคลิกลิงก์ด้านล่างเพื่อเปิดไฟล์คำสั่งจริง</p>
                         ${links || '<p class="text-gray-500">ไม่พบลิงก์ไฟล์คำสั่งจริง</p>'}
                     </div>
