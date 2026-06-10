@@ -164,7 +164,7 @@
 
             <!-- Results List -->
             <div class="mb-4 flex justify-between items-center">
-                <h2 class="text-xl font-bold text-gray-800">รายชื่อกรรมการ</h2>
+                <h2 id="results-heading" class="text-xl font-bold text-gray-800">รายชื่อกรรมการ</h2>
                 <span class="text-sm text-gray-500" id="result-count">...</span>
             </div>
 
@@ -174,6 +174,9 @@
                 <p class="text-gray-400 text-sm mt-2">กรุณารอสักครู่ ระบบกำลังดึงรายชื่อทั้งหมดมาเก็บไว้ในเครื่อง</p>
             </div>
 				
+            <!-- Station Summary (Added for history mode) -->
+            <div id="station-summary-container" class="mb-8 hidden"></div>
+
             <!-- Grid -->
             <div id="results-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
 
@@ -373,7 +376,6 @@
         async function initFilters() {
             try {
                 const data = await apiCall('ch_getFilters');
-                // เพิ่มการตรวจสอบข้อผิดพลาดจาก Backend
                 if (data && data.status === 'error') {
                     console.error('Error from server (Filters):', data.message);
                     return;
@@ -428,7 +430,6 @@
             try {
                 const data = await apiCall('ch_getAllOfficials');
                 
-                // ดักจับ Error หากเซิร์ฟเวอร์ส่งข้อความผิดพลาดกลับมา
                 if (data && data.status === 'error') {
                     throw new Error(data.message);
                 }
@@ -440,13 +441,11 @@
             } catch (error) {
                 loadingSpinner.classList.add('hidden');
                 document.getElementById('result-count').innerText = 'เกิดข้อผิดพลาดในการโหลดข้อมูล';
-                // นำ Error จริงมาแสดงแทนการปล่อยให้ตัวแปรพังแล้วแจ้ง filter
                 Swal.fire('ข้อผิดพลาด', `ไม่สามารถโหลดข้อมูลรายชื่อได้: ${error.message}`, 'error');
             }
         }
 
         function filterAndRender() {
-            // เพื่อป้องกันการพัง หากเกิดเหตุการณ์ที่ allOfficialsData ไม่มีโครงสร้างที่ถูกต้อง
             if (!allOfficialsData || typeof allOfficialsData !== 'object' || !allOfficialsData.active) {
                 return; // หยุดการทำงานถ้าข้อมูลไม่พร้อม
             }
@@ -479,11 +478,25 @@
         function renderOfficials(list) {
             resultsContainer.innerHTML = '';
             document.getElementById('result-count').innerText = `พบ ${list.length} รายการ`;
+            const heading = document.getElementById('results-heading');
+            if (heading) {
+                heading.innerText = replacedFilter.checked ? 'รายละเอียดประวัติการเปลี่ยนรายบุคคล' : 'รายชื่อกรรมการ';
+            }
+
+            const stationSummaryContainer = document.getElementById('station-summary-container');
 
             if (list.length === 0) {
                 noResults.classList.remove('hidden');
+                if (stationSummaryContainer) stationSummaryContainer.classList.add('hidden');
             } else {
                 noResults.classList.add('hidden');
+                
+                if (replacedFilter.checked && stationSummaryContainer) {
+                    renderStationSummary(list, stationSummaryContainer);
+                } else if (stationSummaryContainer) {
+                    stationSummaryContainer.classList.add('hidden');
+                }
+
                 const displayList = list.slice(0, 100); 
                 displayList.forEach(item => {
                     resultsContainer.appendChild(createCard(item));
@@ -495,6 +508,52 @@
                     resultsContainer.appendChild(moreDiv);
                 }
             }
+        }
+
+        function renderStationSummary(list, container) {
+            const stations = {};
+            list.forEach(item => {
+                if (!item.station_number) return;
+                const key = `${item.station_number}_${item.subdistrict}`;
+                if (!stations[key]) {
+                    stations[key] = {
+                        station_number: item.station_number,
+                        subdistrict: item.subdistrict,
+                        id: item.id, 
+                        count: 0
+                    };
+                }
+                stations[key].count++;
+            });
+
+            const keys = Object.keys(stations);
+            if (keys.length === 0) {
+                container.classList.add('hidden');
+                return;
+            }
+
+            container.classList.remove('hidden');
+            let html = `<h2 class="text-xl font-bold text-gray-800 mb-4"><i class="fas fa-layer-group text-blue-600 mr-2"></i>สรุปหน่วยที่มีการเปลี่ยนแปลงกรรมการ</h2>`;
+            html += `<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">`;
+            
+            keys.sort((a, b) => Number(stations[a].station_number) - Number(stations[b].station_number)).forEach(key => {
+                const st = stations[key];
+                html += `
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 flex justify-between items-center shadow-sm">
+                        <div>
+                            <div class="font-bold text-blue-900 text-lg">หน่วยที่ ${st.station_number}</div>
+                            <div class="text-sm text-blue-700">แขวง${st.subdistrict} <span class="text-xs bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full ml-1">${st.count} รายการ</span></div>
+                        </div>
+                        <button onclick="createRealOrder('${st.id}', event, false, 'station')" class="bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 transition flex items-center shadow-sm text-sm whitespace-nowrap">
+                            <i class="fas fa-file-pdf mr-1"></i> คำสั่งรายหน่วย
+                        </button>
+                    </div>
+                `;
+            });
+            html += `</div>`;
+            html += `<hr class="border-gray-300 mb-4">`;
+            
+            container.innerHTML = html;
         }
 
         function createCard(item) {
