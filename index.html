@@ -141,11 +141,20 @@
                     </div>
 
                     <div id="history-date-filter-break" class="basis-full h-0 hidden"></div>
-                    <div id="history-date-filter-wrap" class="w-full md:w-48 relative hidden">
-                        <label class="text-sm text-gray-500 mb-1 block">วันที่เปลี่ยน</label>
-                        <div class="relative">
-                            <input type="date" id="history-date-filter" class="w-full pl-3 pr-8 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                            <i class="fas fa-calendar-day absolute right-3 top-3.5 text-gray-400 pointer-events-none text-xs"></i>
+                    <div id="history-date-filter-wrap" class="w-full md:w-auto relative hidden flex gap-4">
+                        <div>
+                            <label class="text-sm text-gray-500 mb-1 block">วันที่เปลี่ยน (เริ่มต้น)</label>
+                            <div class="relative">
+                                <input type="date" id="history-start-date-filter" class="w-full md:w-40 pl-3 pr-8 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                                <i class="fas fa-calendar-day absolute right-3 top-3.5 text-gray-400 pointer-events-none text-xs"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-sm text-gray-500 mb-1 block">วันที่เปลี่ยน (สิ้นสุด)</label>
+                            <div class="relative">
+                                <input type="date" id="history-end-date-filter" class="w-full md:w-40 pl-3 pr-8 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                                <i class="fas fa-calendar-day absolute right-3 top-3.5 text-gray-400 pointer-events-none text-xs"></i>
+                            </div>
                         </div>
                     </div>
 
@@ -289,7 +298,8 @@
         const replacedFilter = document.getElementById('replaced-filter');
         const historyDateFilterBreak = document.getElementById('history-date-filter-break');
         const historyDateFilterWrap = document.getElementById('history-date-filter-wrap');
-        const historyDateFilter = document.getElementById('history-date-filter');
+        const historyStartDateFilter = document.getElementById('history-start-date-filter');
+        const historyEndDateFilter = document.getElementById('history-end-date-filter');
         const noResults = document.getElementById('no-results');
         const loadingSpinner = document.getElementById('loading-spinner');
         const modal = document.getElementById('replace-modal');
@@ -405,8 +415,11 @@
         }
 
         function setDefaultHistoryDate() {
-            if (historyDateFilter && !historyDateFilter.value) {
-                historyDateFilter.value = formatDateInputValue(new Date());
+            if (historyStartDateFilter && !historyStartDateFilter.value) {
+                historyStartDateFilter.value = formatDateInputValue(new Date());
+            }
+            if (historyEndDateFilter && !historyEndDateFilter.value) {
+                historyEndDateFilter.value = formatDateInputValue(new Date());
             }
         }
 
@@ -455,14 +468,19 @@
             const subdistrict = subdistrictFilter.value;
             const isReplaced = replacedFilter.checked;
             updateHistoryDateFilterVisibility();
-            const selectedHistoryDate = isReplaced && historyDateFilter ? historyDateFilter.value : '';
+            const selectedStartDate = isReplaced && historyStartDateFilter ? historyStartDateFilter.value : '';
+            const selectedEndDate = isReplaced && historyEndDateFilter ? historyEndDateFilter.value : '';
 
             const sourceArray = isReplaced ? allOfficialsData.history : allOfficialsData.active;
             
             const filtered = sourceArray.filter(item => {
                 if (station && String(item.station_number) !== String(station)) return false;
                 if (subdistrict && String(item.subdistrict) !== String(subdistrict)) return false;
-                if (selectedHistoryDate && formatDateInputValue(item.timestamp) !== selectedHistoryDate) return false;
+                if (isReplaced && (selectedStartDate || selectedEndDate)) {
+                    const itemDate = formatDateInputValue(item.timestamp);
+                    if (selectedStartDate && itemDate < selectedStartDate) return false;
+                    if (selectedEndDate && itemDate > selectedEndDate) return false;
+                }
                 
                 if (query) {
                     const fullName = `${item.prefix || ''}${item.firstname} ${item.lastname}`.toLowerCase();
@@ -739,7 +757,10 @@
             });
 
             try {
-                const res = await apiCall('ch_createRealOrder', { history_id: id, force_create: forceCreate, report_mode: reportMode });
+                const startDate = document.getElementById('history-start-date-filter') ? document.getElementById('history-start-date-filter').value : '';
+                const endDate = document.getElementById('history-end-date-filter') ? document.getElementById('history-end-date-filter').value : '';
+                const payload = { history_id: id, force_create: forceCreate, report_mode: reportMode, start_date: startDate, end_date: endDate };
+                const res = await apiCall('ch_createRealOrder', payload);
                 if (res.status === 'exists') {
                     const existing = res.existing || {};
                     const choice = await Swal.fire({
@@ -897,7 +918,8 @@
         stationFilter.addEventListener('change', filterAndRender);
         subdistrictFilter.addEventListener('change', filterAndRender);
         replacedFilter.addEventListener('change', filterAndRender);
-        historyDateFilter.addEventListener('change', filterAndRender);
+        if (historyStartDateFilter) historyStartDateFilter.addEventListener('change', filterAndRender);
+        if (historyEndDateFilter) historyEndDateFilter.addEventListener('change', filterAndRender);
         setDefaultHistoryDate();
         updateHistoryDateFilterVisibility();
     </script>
