@@ -787,7 +787,7 @@
                         title: `${getRealOrderReportModeLabel(reportMode)}นี้มีคำสั่งแล้ว`,
                         html: `
                             <div class="text-left space-y-2">
-                                <p>${getRealOrderReportModeLabel(reportMode)} หน่วยเลือกตั้งที่ ${existing.stationNumberThai || existing.stationNumber || ''} เคยสร้างเอกสารรายงานไปแล้ว</p>
+                                <p>${getRealOrderReportModeLabel(reportMode)} หน่วยเลือกตั้งที่ ${existing.stationNumberThai || existing.stationNumber || ''}${existing.subDistrict ? ` แขวง${existing.subDistrict}` : ''} เคยสร้างเอกสารรายงานไปแล้ว</p>
                                 <p class="text-sm text-gray-500">${existing.fileName || ''}</p>
                             </div>
                         `,
@@ -829,7 +829,7 @@
                 title: 'เลือกแบบสร้างคำสั่ง',
                 html: `
                     <div class="text-left space-y-2">
-                        <p class="text-gray-700">เลือกว่าจะสร้างคำสั่งสำหรับรายการที่กดเพียงคนเดียว หรือรวมทุกคนที่ถูกเพิ่ม/เปลี่ยนแปลงภายหลังในหน่วยเดียวกัน</p>
+                        <p class="text-gray-700">เลือกว่าจะสร้างคำสั่งสำหรับรายการที่กดเพียงคนเดียว หรือรวมทุกคนที่ถูกเพิ่ม/เปลี่ยนแปลงภายหลังในหน่วยที่และแขวงเดียวกัน</p>
                     </div>
                 `,
                 showDenyButton: true,
